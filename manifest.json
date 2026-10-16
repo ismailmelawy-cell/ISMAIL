@@ -1,0 +1,11 @@
+{
+  "name": "صيدليتي - إدارة الصيدلية",
+  "short_name": "صيدليتي",
+  "lang": "ar",
+  "dir": "rtl",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#f3f7f5",
+  "theme_color": "#087f5b",
+  "description": "بداية مجانية لنظام إدارة صيدلية يعمل محليًا"
+}
