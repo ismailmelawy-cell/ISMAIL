@@ -1,86 +1,223 @@
-const DB_NAME = "saydalaty-db";
-const DB_VERSION = 1;
-let db;
 
-function openDatabase() {
-  return new Promise((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, DB_VERSION);
-    request.onupgradeneeded = () => {
-      const database = request.result;
-      if (!database.objectStoreNames.contains("medicines")) {
-        const store = database.createObjectStore("medicines", { keyPath: "id", autoIncrement: true });
-        store.createIndex("name", "name", { unique: false });
-        store.createIndex("barcode", "barcode", { unique: false });
-      }
-    };
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error);
+import { auth, cloudDB } from "./firebase-init.js";
+
+import {
+  signInWithEmailAndPassword,
+  signOut,
+  onAuthStateChanged
+} from "https://www.gstatic.com/firebasejs/12.4.0/firebase-auth.js";
+
+import {
+  collection,
+  addDoc,
+  onSnapshot,
+  serverTimestamp
+} from "https://www.gstatic.com/firebasejs/12.4.0/firebase-firestore.js";
+
+// استبدل القيمة التالية ببريد حساب المدير المسجل في Firebase
+const MANAGER_EMAIL = "PUT_MANAGER_EMAIL_HERE";
+
+let unsubscribeMedicines = null;
+let medicines = [];
+
+const $ = id => document.getElementById(id);
+
+function showMessage(message) {
+  $("loginMessage").textContent = message;
+}
+
+function updateConnection() {
+  $("connection").textContent = navigator.onLine
+    ? "متصل بالإنترنت"
+    : "غير متصل بالإنترنت";
+}
+
+function money(value) {
+  return Number(value || 0).toLocaleString("ar-EG", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
   });
 }
-function allMedicines() {
-  return new Promise((resolve, reject) => {
-    const request = db.transaction("medicines", "readonly").objectStore("medicines").getAll();
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error);
-  });
-}
-function addMedicine(medicine) {
-  return new Promise((resolve, reject) => {
-    const request = db.transaction("medicines", "readwrite").objectStore("medicines").add(medicine);
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error);
-  });
-}
-const money = n => Number(n || 0).toLocaleString("ar-EG", {minimumFractionDigits:2, maximumFractionDigits:2});
+
 function escapeHtml(value) {
-  return String(value ?? "").replace(/[&<>"']/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]));
+  return String(value ?? "").replace(/[&<>"']/g, char => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;"
+  })[char]);
 }
-async function render() {
-  const all = await allMedicines();
-  const query = document.getElementById("search").value.trim().toLowerCase();
-  const filtered = all.filter(m => m.name.toLowerCase().includes(query) || (m.barcode || "").toLowerCase().includes(query));
-  document.getElementById("totalItems").textContent = all.length;
-  document.getElementById("lowStock").textContent = all.filter(m => m.quantity <= 5).length;
-  const list = document.getElementById("medicineList");
+
+function render() {
+  const query = $("search").value.trim().toLowerCase();
+
+  const filtered = medicines.filter(m =>
+    String(m.name || "").toLowerCase().includes(query) ||
+    String(m.barcode || "").toLowerCase().includes(query)
+  );
+
+  $("totalItems").textContent = medicines.length;
+  $("lowStock").textContent =
+    medicines.filter(m => Number(m.quantity) <= 5).length;
+
   if (!filtered.length) {
-    list.innerHTML = `<p class="empty">${all.length ? "لا توجد نتائج مطابقة." : "لا توجد أصناف بعد."}</p>`;
+    $("medicineList").innerHTML =
+      `<p class="empty">${
+        medicines.length
+          ? "لا توجد نتائج مطابقة."
+          : "لا توجد أصناف بعد."
+      }</p>`;
     return;
   }
-  list.innerHTML = filtered.sort((a,b) => a.name.localeCompare(b.name)).map(m => `
-    <article class="medicine">
-      <span class="name">${escapeHtml(m.name)}</span>
-      <span class="meta">الكمية: <b class="${m.quantity <= 5 ? "low" : ""}">${m.quantity}</b> · شراء: ${money(m.buyPrice)} · بيع: ${money(m.sellPrice)} جنيه</span>
-      <span class="meta">الباركود: ${escapeHtml(m.barcode || "غير مسجل")} · الصلاحية: ${escapeHtml(m.expiry || "غير مسجلة")}</span>
-    </article>`).join("");
+
+  $("medicineList").innerHTML = filtered
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .map(m => `
+      <article class="medicine">
+        <span class="name">${escapeHtml(m.name)}</span>
+        <span class="meta">
+          الكمية:
+          <b class="${Number(m.quantity) <= 5 ? "low" : ""}">
+            ${Number(m.quantity)}
+          </b>
+          · شراء: ${money(m.buyPrice)}
+          · بيع: ${money(m.sellPrice)} جنيه
+        </span>
+        <span class="meta">
+          الباركود: ${escapeHtml(m.barcode || "غير مسجل")}
+          · الصلاحية: ${escapeHtml(m.expiry || "غير مسجلة")}
+        </span>
+      </article>
+    `).join("");
 }
-document.getElementById("medicineForm").addEventListener("submit", async event => {
+
+function stopMedicineListener() {
+  if (unsubscribeMedicines) {
+    unsubscribeMedicines();
+    unsubscribeMedicines = null;
+  }
+  medicines = [];
+}
+
+function startMedicineListener() {
+  stopMedicineListener();
+
+  unsubscribeMedicines = onSnapshot(
+    collection(cloudDB, "medicines"),
+    snapshot => {
+      medicines = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      render();
+    },
+    error => {
+      console.error(error);
+      alert("تعذر تحميل الأصناف. راجع قواعد Firestore واتصال الإنترنت.");
+    }
+  );
+}
+
+$("loginForm").addEventListener("submit", async event => {
   event.preventDefault();
-  const medicine = {
-    name: document.getElementById("name").value.trim(),
-    barcode: document.getElementById("barcode").value.trim(),
-    quantity: Number(document.getElementById("quantity").value),
-    buyPrice: Number(document.getElementById("buyPrice").value),
-    sellPrice: Number(document.getElementById("sellPrice").value),
-    expiry: document.getElementById("expiry").value,
-    createdAt: new Date().toISOString()
-  };
-  if (!medicine.name || medicine.quantity < 0 || medicine.buyPrice < 0 || medicine.sellPrice < 0) return;
-  await addMedicine(medicine);
-  event.target.reset();
-  document.getElementById("quantity").value = "0";
-  document.getElementById("buyPrice").value = "0";
-  document.getElementById("sellPrice").value = "0";
-  await render();
+  const email = $("loginEmail").value.trim();
+  const password = $("loginPassword").value;
+
+  showMessage("جارٍ تسجيل الدخول...");
+
+  try {
+    await signInWithEmailAndPassword(auth, email, password);
+  } catch (error) {
+    console.error(error);
+    showMessage("تعذر تسجيل الدخول. راجع البريد وكلمة المرور.");
+  }
 });
-document.getElementById("search").addEventListener("input", render);
-function updateConnection() {
-  const el = document.getElementById("connection");
-  el.textContent = navigator.onLine ? "متصل بالإنترنت" : "أوفلاين";
-}
+
+$("logoutButton").addEventListener("click", async () => {
+  try {
+    await signOut(auth);
+  } catch (error) {
+    console.error(error);
+    alert("تعذر تسجيل الخروج.");
+  }
+});
+
+$("medicineForm").addEventListener("submit", async event => {
+  event.preventDefault();
+
+  const user = auth.currentUser;
+
+  if (!user || user.email?.toLowerCase() !== MANAGER_EMAIL.toLowerCase()) {
+    alert("هذا الحساب غير مصرح له بإضافة الأصناف.");
+    return;
+  }
+
+  const medicine = {
+    name: $("name").value.trim(),
+    barcode: $("barcode").value.trim(),
+    quantity: Number($("quantity").value),
+    buyPrice: Number($("buyPrice").value),
+    sellPrice: Number($("sellPrice").value),
+    expiry: $("expiry").value,
+    createdAt: serverTimestamp(),
+    createdBy: user.uid
+  };
+
+  if (
+    !medicine.name ||
+    !Number.isInteger(medicine.quantity) ||
+    medicine.quantity < 0 ||
+    medicine.buyPrice < 0 ||
+    medicine.sellPrice < 0
+  ) {
+    alert("راجع اسم الدواء والكمية والأسعار.");
+    return;
+  }
+
+  try {
+    await addDoc(collection(cloudDB, "medicines"), medicine);
+    event.target.reset();
+    $("quantity").value = "0";
+    $("buyPrice").value = "0";
+    $("sellPrice").value = "0";
+  } catch (error) {
+    console.error(error);
+    alert("لم يتم حفظ الصنف. تأكد من إعداد قواعد Firestore.");
+  }
+});
+
+$("search").addEventListener("input", render);
+
+onAuthStateChanged(auth, user => {
+  stopMedicineListener();
+
+  if (!user) {
+    $("loginPanel").hidden = false;
+    $("appContent").hidden = true;
+    $("userInfo").textContent = "";
+    return;
+  }
+
+  if (
+    !user.email ||
+    user.email.toLowerCase() !== MANAGER_EMAIL.toLowerCase()
+  ) {
+    $("loginPanel").hidden = false;
+    $("appContent").hidden = true;
+    showMessage("هذا الحساب غير مسجل كحساب مدير.");
+    signOut(auth).catch(console.error);
+    return;
+  }
+
+  $("loginPanel").hidden = true;
+  $("appContent").hidden = false;
+  $("userInfo").textContent = `تم تسجيل الدخول: ${user.email}`;
+  showMessage("");
+
+  startMedicineListener();
+});
+
+updateConnection();
 window.addEventListener("online", updateConnection);
 window.addEventListener("offline", updateConnection);
-(async function init() {
-  updateConnection();
-  try { db = await openDatabase(); await render(); }
-  catch (error) { alert("تعذر فتح قاعدة البيانات المحلية. افتح التطبيق من متصفح حديث عبر HTTPS."); console.error(error); }
-})();
