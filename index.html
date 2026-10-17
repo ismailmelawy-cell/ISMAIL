@@ -1,3 +1,4 @@
+
 <!doctype html>
 <html lang="ar" dir="rtl">
 <head>
@@ -18,46 +19,67 @@
   </header>
 
   <main>
-    <section class="summary">
-      <article><span>عدد الأصناف</span><strong id="totalItems">0</strong></article>
-      <article><span>أصناف مخزونها منخفض</span><strong id="lowStock">0</strong></article>
-    </section>
-
-    <section class="panel">
-      <h2>إضافة صنف دوائي</h2>
-      <form id="medicineForm">
-        <label>اسم الدواء<input id="name" required maxlength="120" placeholder="مثال: Paracetamol 500 mg"></label>
-        <div class="two">
-          <label>الباركود (اختياري)<input id="barcode" inputmode="numeric" maxlength="80"></label>
-          <label>الكمية<input id="quantity" type="number" min="0" step="1" required value="0"></label>
-        </div>
-        <div class="two">
-          <label>سعر الشراء<input id="buyPrice" type="number" min="0" step="0.01" required value="0"></label>
-          <label>سعر البيع<input id="sellPrice" type="number" min="0" step="0.01" required value="0"></label>
-        </div>
-        <label>تاريخ الصلاحية<input id="expiry" type="date"></label>
-        <button type="submit">حفظ الصنف على هذا الجهاز</button>
+    <section id="loginPanel" class="panel">
+      <h2>تسجيل الدخول</h2>
+      <p>سجّل الدخول بحسابك المصرّح به لاستخدام الصيدلية.</p>
+      <form id="loginForm">
+        <label>البريد الإلكتروني
+          <input id="loginEmail" type="email" autocomplete="username" required>
+        </label>
+        <label>كلمة المرور
+          <input id="loginPassword" type="password" autocomplete="current-password" required>
+        </label>
+        <button type="submit">دخول</button>
+        <p id="loginMessage" role="status" aria-live="polite"></p>
       </form>
-      <p class="note">هذه نسخة أولية للتجربة فقط؛ البيانات محفوظة محليًا في المتصفح على هذا الجهاز.</p>
     </section>
 
-    <section class="panel">
-      <div class="list-head">
-        <h2>الأصناف المسجلة</h2>
-        <input id="search" placeholder="ابحث باسم الدواء أو الباركود">
-      </div>
-      <div id="medicineList" class="medicine-list"><p class="empty">لا توجد أصناف بعد.</p></div>
-    </section>
+    <div id="appContent" hidden>
+      <section class="panel">
+        <p id="userInfo"></p>
+        <button id="logoutButton" type="button">تسجيل الخروج</button>
+      </section>
 
-    <section class="panel warning">
-      <h2>قبل الاستخدام الفعلي</h2>
-      <p>هذه بداية لبناء النظام وليست برنامج صيدلية جاهزًا للبيع. لم تُضف بعد الفواتير والمشتريات والمرتجعات والمستخدمون والمزامنة السحابية والنسخ الاحتياطي.</p>
-    </section>
+      <section class="summary">
+        <article><span>عدد الأصناف</span><strong id="totalItems">0</strong></article>
+        <article><span>أصناف مخزونها منخفض</span><strong id="lowStock">0</strong></article>
+      </section>
+
+      <section class="panel">
+        <h2>إضافة صنف دوائي</h2>
+        <form id="medicineForm">
+          <label>اسم الدواء<input id="name" required maxlength="120" placeholder="مثال: Paracetamol 500 mg"></label>
+          <div class="two">
+            <label>الباركود (اختياري)<input id="barcode" inputmode="numeric" maxlength="80"></label>
+            <label>الكمية<input id="quantity" type="number" min="0" step="1" required value="0"></label>
+          </div>
+          <div class="two">
+            <label>سعر الشراء<input id="buyPrice" type="number" min="0" step="0.01" required value="0"></label>
+            <label>سعر البيع<input id="sellPrice" type="number" min="0" step="0.01" required value="0"></label>
+          </div>
+          <label>تاريخ الصلاحية<input id="expiry" type="date"></label>
+          <button type="submit">حفظ الصنف</button>
+        </form>
+      </section>
+
+      <section class="panel">
+        <div class="list-head">
+          <h2>الأصناف المسجلة</h2>
+          <input id="search" placeholder="ابحث باسم الدواء أو الباركود">
+        </div>
+        <div id="medicineList" class="medicine-list">
+          <p class="empty">لا توجد أصناف بعد.</p>
+        </div>
+      </section>
+    </div>
   </main>
-<script type="module" src="app.js"></script>
+
+  <script type="module" src="app.js"></script>
+  <script>
     if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
       navigator.serviceWorker.register('./service-worker.js').catch(console.error);
     }
   </script>
 </body>
 </html>
+
