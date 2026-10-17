@@ -15,7 +15,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/12.4.0/firebase-firestore.js";
 
 // استبدل القيمة التالية ببريد حساب المدير المسجل في Firebase
-const MANAGER_EMAIL = "PUT_MANAGER_EMAIL_HERE";
+const MANAGER_EMAIL = "ismailmelawy@gmail.com";
 
 let unsubscribeMedicines = null;
 let medicines = [];
